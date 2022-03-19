@@ -1,0 +1,10 @@
+# elm-package generated files
+elm-stuff
+# elm-repl generated files
+repl-temp-*
+# npm node_modules files
+node_modules
+public
+# WebStorm files
+.idea/
+.DS_Store
