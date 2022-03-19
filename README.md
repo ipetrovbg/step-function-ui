@@ -1,2 +1,1 @@
-# Elm start-up template
-Elm start-up Template
+# Step Function Definition UI
