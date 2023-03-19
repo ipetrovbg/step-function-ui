@@ -8,3 +8,4 @@ public
 # WebStorm files
 .idea/
 .DS_Store
+target

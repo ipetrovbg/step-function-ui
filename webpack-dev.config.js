@@ -7,22 +7,33 @@ module.exports = {
     module: {
         rules: [
             {
-                test: /\.html$/,
-                exclude: /node_modules/,
-                loader: 'file-loader?name=[name].[ext]'
-            },
-            {
                 test: /\.elm$/,
                 exclude: [/elm-stuff/, /node_modules/],
-                use: {
-                    loader: 'elm-webpack-loader?verbose=true&warn=true',
-                    options: {
-                        optimize: false
-                        , runtimeOptions: ['-A128M', '-H128M', '-n8m']
-                        , forceWatch: true
-                        , debug: true
-                    }
-                }
+                use: [
+                    {
+                        loader: require.resolve("elm-asset-webpack-loader")
+                    },
+                    {
+                        loader: 'elm-webpack-loader?verbose=true&warn=true',
+                        options: {
+                            optimize: false
+                            , runtimeOptions: ['-A128M', '-H128M', '-n8m']
+                            , forceWatch: true
+                            , debug: true
+                        }
+                    },
+                ]
+            },
+            {
+                test: /\.(jpe?g|png|gif|svg|html)$/,
+                exclude: /node_modules/,
+                loader: 'file-loader?name=[name].[ext]',
+                // options: {
+                //     publicPath: function(path) {
+                //         // transform `path` to a URL that the web server can understand and serve
+                //         return "/public/" + path;
+                //     }
+                // }
             },
         ]
         , noParse: /\.elm$/

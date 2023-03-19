@@ -7,10 +7,11 @@
     "build": "webpack --config webpack.config.js",
     "start": "webpack-dev-server --config webpack.config.js",
     "start:dev": "echo y | npm run format && webpack-dev-server --config webpack-dev.config.js",
-    "format": "elm-format src"
+    "format": "echo y | elm-format src"
   },
   "devDependencies": {
     "css-loader": "3.5.3",
+    "elm-asset-webpack-loader": "^1.1.3",
     "elm-format": "0.8.5",
     "elm-webpack-loader": "6.0.1",
     "file-loader": "6.0.0",
