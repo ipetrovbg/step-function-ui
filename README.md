@@ -6,6 +6,12 @@ Well, this is it 🤟
 First screen shows your local state machines.
 ![state machines view](src/static/state-machines.png)
 
+State machine's executions.
+![state machine's executions](src/static/executions.png)
+
+...and execution steps.
+![execution's steps](src/static/events.png)
+
 ### Prerequisites
 - Elm
   - https://guide.elm-lang.org/install/elm.html

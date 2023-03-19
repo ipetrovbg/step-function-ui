@@ -75,7 +75,7 @@ stateMachineDataView stateMachines =
                         , Element.Border.widthEach { each | bottom = 1 }
                         ]
                     <|
-                        Element.text "Created At"
+                        Element.text "Created"
               , width = Element.fill
               , view =
                     \stateMachine ->
@@ -229,7 +229,7 @@ executionsTableView executions =
                         , Element.Border.widthEach { each | bottom = 1 }
                         ]
                     <|
-                        Element.text "Start At"
+                        Element.text "Started"
               , width = Element.fill
               , view =
                     \execution ->
@@ -251,7 +251,7 @@ executionsTableView executions =
                         , Element.Border.widthEach { each | bottom = 1 }
                         ]
                     <|
-                        Element.text "Stop At"
+                        Element.text "Stopped"
               , width = Element.fill
               , view =
                     \execution ->
