@@ -21,3 +21,8 @@ npm i
 ```shell
 cd server | cargo run
 ```
+
+#### Start FE on port `8080`
+```shell
+npm run start:dev
+```
