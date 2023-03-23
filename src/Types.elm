@@ -1,6 +1,7 @@
 module Types exposing
     ( Active(..)
     , Base
+    , BaseNotification
     , Event(..)
     , EventsResponse
     , Execution
@@ -11,6 +12,9 @@ module Types exposing
     , LambdaScheduledDetails
     , Model
     , Msg(..)
+    , Notification(..)
+    , NotificationVisibility(..)
+    , Region(..)
     , StartedEvent
     , StartedEventDetails
     , StateEntered
@@ -26,6 +30,7 @@ module Types exposing
 
 import Browser exposing (UrlRequest)
 import RemoteData exposing (WebData)
+import UUID exposing (UUID)
 import Url exposing (Url)
 
 
@@ -64,7 +69,7 @@ type alias StartedEvent =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -78,7 +83,7 @@ type alias StateEntered =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : StateEnteredDetails
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -98,7 +103,7 @@ type alias StateExited =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : StateExitedDetails
     , timestamp : String
@@ -118,7 +123,7 @@ type alias LambdaFunctionScheduled =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : LambdaScheduledDetails
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -138,7 +143,7 @@ type alias Base =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -152,7 +157,7 @@ type alias LambdaFunctionFailed =
     , id : Int
     , lambdaFunctionFailedEventDetails : LambdaFunctionFailedDetails
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -177,7 +182,7 @@ type alias SucceededEvent =
     , id : Int
     , lambdaFunctionFailedEventDetails : ()
     , lambdaFunctionScheduledEventDetails : ()
-    , previousEventId : Int
+    , previousEventId : Maybe Int
     , stateEnteredEventDetails : ()
     , stateExitedEventDetails : ()
     , timestamp : String
@@ -217,11 +222,35 @@ type Active
     | ExecutionHistoryView Execution
 
 
+type alias BaseNotification =
+    { message : String
+    , uuid : UUID
+    }
+
+
+type Notification
+    = ErrorNotification BaseNotification
+    | InfoNotification BaseNotification
+    | SuccessNotification BaseNotification
+
+
+type Region
+    = Region String
+
+
+type NotificationVisibility
+    = Visible (List Notification)
+    | Hidden (List Notification)
+    | Cleared
+
+
 type alias Model =
     { stateMachines : WebData (List StateMachine)
     , active : Active
     , executions : WebData (List Execution)
     , events : WebData (List Event)
+    , notifications : NotificationVisibility
+    , randomInt : Int
     }
 
 
@@ -233,7 +262,7 @@ type Msg
     | HandleFetchingStateMachineExecutions (WebData StateMachineExecutionsResponse)
     | HandleFetchingEvents (WebData EventsResponse)
     | FetchStateMachines
-    | FetchStateMachine String String
+    | FetchStateMachine Region String
     | FetchStateMachinesExecutions
     | FetchEvents
     | NoOp
@@ -241,4 +270,13 @@ type Msg
     | SelectExecution Execution
     | SelectView Active
     | HandleDeleteStateMachine (WebData String)
-    | DeleteStateMachine String String
+    | HandlePostMachine (WebData Int)
+    | DeleteStateMachine Region String
+    | StopRunningExecution Region String
+    | ClearNotification UUID
+    | PostSuccessNotification String
+    | PostErrorNotification String
+    | PostInfoNotification String
+    | GotSeed Int
+    | ShowNotifications
+    | HideNotifications

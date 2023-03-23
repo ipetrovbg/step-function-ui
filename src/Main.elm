@@ -1,29 +1,231 @@
 module Main exposing (..)
 
---import Constants
---import Graph
---import List exposing (map)
---import Svg exposing (Svg, circle, g, line, polygon, rect, svg)
---import Svg.Attributes as SvgAttr
-
-import Api exposing (deleteStateMachine, getEvents, getStateMachine, getStateMachineExecutions, getStateMachines)
+import Api exposing (deleteStateMachine, getEvents, getStateMachine, getStateMachineExecutions, getStateMachines, stopRunningExecution)
 import Browser exposing (Document)
 import Browser.Navigation exposing (Key)
 import Colors
-import Constants exposing (each)
+import Constants exposing (each, london)
 import Debug exposing (toString)
 import Element exposing (Color, Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Html.Attributes
+import Random
 import RemoteData exposing (RemoteData(..), WebData)
-import Types exposing (Active(..), Base, Event(..), Execution, Flags, LambdaFunctionFailedDetails, LambdaScheduledDetails, Model, Msg(..), StartedEventDetails, StateEnteredDetails, StateExitedDetails, StateMachine, SucceededEventDetails)
+import Types exposing (Active(..), Base, BaseNotification, Event(..), Execution, Flags, LambdaFunctionFailedDetails, LambdaScheduledDetails, Model, Msg(..), Notification(..), NotificationVisibility(..), Region(..), StartedEventDetails, StateEnteredDetails, StateExitedDetails, StateMachine, SucceededEventDetails)
+import UUID exposing (UUID)
 import Url exposing (Url)
+import Utils exposing (perform)
 
 
-header : Element msg
-header =
+errorNotificationView : BaseNotification -> Element Msg
+errorNotificationView error =
+    Element.row
+        [ Element.width Element.fill
+        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Border.rounded 4
+        ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.Background.color <| Colors.errorColor <| Just 0.1
+            ]
+            [ Element.el
+                [ Element.Font.color <| Colors.darkBody <| Just 1.0
+                , Element.padding 16
+                ]
+              <|
+                Element.text error.message
+            , Element.Input.button
+                [ Element.padding 8, Element.alignRight ]
+                { label =
+                    Element.image [ Element.width <| Element.px 16 ]
+                        { src = "src/static/close.svg"
+                        , description = "Clear Notification button"
+                        }
+                , onPress = Just <| ClearNotification error.uuid
+                }
+            ]
+        ]
+
+
+infoNotificationView : BaseNotification -> Element Msg
+infoNotificationView notification =
+    Element.row
+        [ Element.width Element.fill
+        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Border.rounded 4
+        ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.Background.color <| Colors.primaryColor <| Just 0.2
+            ]
+            [ Element.el
+                [ Element.Font.color <| Colors.darkBody <| Just 1.0
+                , Element.padding 16
+                ]
+              <|
+                Element.text notification.message
+            , Element.Input.button
+                [ Element.padding 8
+                , Element.alignRight
+                ]
+                { label =
+                    Element.image [ Element.width <| Element.px 16 ]
+                        { src = "src/static/close.svg"
+                        , description = "Clear Notification button"
+                        }
+                , onPress = Just <| ClearNotification notification.uuid
+                }
+            ]
+        ]
+
+
+successNotificationView : BaseNotification -> Element Msg
+successNotificationView notification =
+    Element.row
+        [ Element.width Element.fill
+        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Border.rounded 4
+        ]
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.Background.color <| Colors.successColor <| Just 0.1
+            ]
+            [ Element.el
+                [ Element.Font.color <| Colors.darkBody <| Just 1.0
+                , Element.padding 16
+                ]
+              <|
+                Element.text notification.message
+            , Element.Input.button
+                [ Element.padding 8
+                , Element.alignRight
+                ]
+                { label =
+                    Element.image [ Element.width <| Element.px 16 ]
+                        { src = "src/static/close.svg"
+                        , description = "Clear Notification button"
+                        }
+                , onPress = Just <| ClearNotification notification.uuid
+                }
+            ]
+        ]
+
+
+renderNotificationBell : List Notification -> Element Msg
+renderNotificationBell notifications =
+    case List.length notifications of
+        0 ->
+            Element.Input.button []
+                { label =
+                    Element.image [ Element.width <| Element.px 20 ]
+                        { src = "src/static/bell-off.svg"
+                        , description = "Toggle notification button"
+                        }
+                , onPress = Just NoOp
+                }
+
+        _ ->
+            Element.Input.button []
+                { label =
+                    Element.image [ Element.width <| Element.px 20 ]
+                        { src = "src/static/bell-off.svg"
+                        , description = "Toggle notification button"
+                        }
+                , onPress = Just NoOp
+                }
+
+
+notificationListView : NotificationVisibility -> Element Msg
+notificationListView messages =
+    let
+        bellBtn =
+            case messages of
+                Visible n ->
+                    let
+                        icon =
+                            case List.length n of
+                                0 ->
+                                    "bell-off.svg"
+
+                                _ ->
+                                    "bell-on.svg"
+                    in
+                    Element.Input.button []
+                        { label =
+                            Element.image [ Element.width <| Element.px 20 ]
+                                { src = "src/static/" ++ icon
+                                , description = "Toggle notification button"
+                                }
+                        , onPress = Just HideNotifications
+                        }
+
+                Hidden n ->
+                    let
+                        icon =
+                            case List.length n of
+                                0 ->
+                                    "bell-off.svg"
+
+                                _ ->
+                                    "bell-on.svg"
+                    in
+                    Element.Input.button []
+                        { label =
+                            Element.image [ Element.width <| Element.px 20 ]
+                                { src = "src/static/" ++ icon
+                                , description = "Toggle notification button"
+                                }
+                        , onPress = Just ShowNotifications
+                        }
+
+                Cleared ->
+                    Element.Input.button []
+                        { label =
+                            Element.image [ Element.width <| Element.px 20 ]
+                                { src = "src/static/bell-off.svg"
+                                , description = "Toggle notification button"
+                                }
+                        , onPress = Nothing
+                        }
+    in
+    Element.column
+        [ Element.height <| Element.px 700
+        , Element.padding 16
+        ]
+        [ bellBtn
+        , Element.column
+            [ Element.height (Element.fill |> Element.maximum 700)
+            , Element.scrollbarX
+            , Element.spacing 16
+            , Element.padding 16
+            ]
+            (case messages of
+                Visible notifications ->
+                    notifications
+                        |> List.map
+                            (\msg ->
+                                case msg of
+                                    ErrorNotification notification ->
+                                        errorNotificationView notification
+
+                                    InfoNotification notification ->
+                                        infoNotificationView notification
+
+                                    SuccessNotification notification ->
+                                        successNotificationView notification
+                            )
+
+                _ ->
+                    [ Element.none ]
+            )
+        ]
+
+
+header : Model -> Element Msg
+header model =
     Element.row
         [ Element.width Element.fill
         , Element.height <| Element.px 80
@@ -31,9 +233,13 @@ header =
         , Element.Font.color <| Colors.lightBody Nothing
         , Element.paddingEach Constants.standardPadding16
         , Element.spaceEvenly
+        , Element.below (notificationListView model.notifications)
         ]
         [ Element.el [] <| Element.text "Step Functions - Local"
-        , Element.image [ Element.width <| Element.px 40 ] { src = "src/static/aws-step-functions-seeklogo.com2.svg", description = "AWS Step Functions Logo" }
+        , Element.image [ Element.width <| Element.px 40 ]
+            { src = "src/static/aws-step-functions-seeklogo.com2.svg"
+            , description = "AWS Step Functions Logo"
+            }
         ]
 
 
@@ -107,7 +313,8 @@ stateMachineDataView stateMachines =
                             , Element.Font.color <| Colors.errorColor <| Just 1.0
                             ]
                             { label = Element.text "Delete"
-                            , onPress = Just <| DeleteStateMachine "eu-west-2" stateMachine.stateMachineArn
+                            , onPress =
+                                Just <| DeleteStateMachine london stateMachine.stateMachineArn
                             }
               }
             ]
@@ -160,6 +367,9 @@ getStatusColor status =
             Colors.successColor <| Just 1.0
 
         "FAILED" ->
+            Colors.errorColor <| Just 1.0
+
+        "ABORTED" ->
             Colors.errorColor <| Just 1.0
 
         _ ->
@@ -264,6 +474,44 @@ executionsTableView executions =
                             Element.text <|
                                 String.slice 0 19 execution.startDate
               }
+            , { header =
+                    Element.el
+                        [ Element.padding 8
+                        , Element.Font.bold
+                        , Element.Font.size 18
+                        , Element.Border.color (Colors.darkBody <| Just 1.0)
+                        , Element.Border.widthEach { each | bottom = 1 }
+                        ]
+                    <|
+                        Element.text "Action"
+              , width = Element.fill
+              , view =
+                    \execution ->
+                        case execution.status of
+                            "RUNNING" ->
+                                Element.el
+                                    [ Element.padding 8
+                                    , Element.Font.size 16
+                                    , Element.spacing 8
+                                    ]
+                                <|
+                                    Element.Input.button []
+                                        { label =
+                                            Element.el
+                                                [ Element.Font.color <|
+                                                    Colors.errorColor <|
+                                                        Just 1.0
+                                                ]
+                                            <|
+                                                Element.text "Stop"
+                                        , onPress =
+                                            Just <|
+                                                StopRunningExecution london execution.executionArn
+                                        }
+
+                            _ ->
+                                Element.none
+              }
             ]
         }
 
@@ -344,13 +592,13 @@ stepColor event =
         Start _ ->
             Colors.primaryColor <| Just 1.0
 
-        Entered ev ->
+        Entered _ ->
             Colors.primaryColor <| Just 1.0
 
-        Exited ev ->
+        Exited _ ->
             Colors.primaryColor <| Just 1.0
 
-        LambdaScheduled ev ->
+        LambdaScheduled _ ->
             Colors.primaryColor <| Just 1.0
 
         BaseEvent ev ->
@@ -360,21 +608,32 @@ stepColor event =
                         "ExecutionFailed" ->
                             Colors.errorColor <| Just 1.0
 
+                        "ExecutionAborted" ->
+                            Colors.errorColor <| Just 1.0
+
+                        "TaskSubmitFailed" ->
+                            Colors.errorColor <| Just 1.0
+
                         _ ->
                             Colors.primaryColor <| Just 1.0
             in
             color
 
-        LambdaFailed ev ->
+        LambdaFailed _ ->
             Colors.errorColor <| Just 1.0
 
-        Succeeded ev ->
+        Succeeded _ ->
             Colors.successColor <| Just 1.0
 
 
 executionHistoryTableView : List Event -> Element Msg
 executionHistoryTableView events =
-    Element.table [ Element.paddingXY 0 16, Element.width Element.fill ]
+    Element.table
+        [ Element.paddingXY 0 16
+        , Element.width Element.fill
+        , Element.height <| Element.px 680
+        , Element.scrollbarX
+        ]
         { data = events
         , columns =
             [ { header =
@@ -525,9 +784,10 @@ lambdaFailedView event =
     Element.row
         [ Element.scrollbarX
         , Element.padding 16
+        , Element.spacing 16
         ]
-        [ Element.el [ Element.Font.size 16 ] <| Element.text event.cause
-        , Element.el [ Element.Font.size 16 ] <| Element.text event.error
+        [ Element.el [ Element.Font.size 16 ] <| Element.text event.error
+        , Element.el [ Element.Font.size 16 ] <| Element.text event.cause
         ]
 
 
@@ -553,23 +813,38 @@ lambdaScheduledView event =
 
 stateExitedView : StateExitedDetails -> Element msg
 stateExitedView event =
-    Element.row
-        [ Element.scrollbarX
-        , Element.padding 16
+    Element.column
+        [ Element.padding 16
+        , Element.height <| Element.px 250
+        , Element.spacing 16
         ]
-        [ Element.el [ Element.Font.size 16 ] <| Element.text event.name
-        , Element.el [ Element.Font.size 16 ] <| Element.text event.output
+        [ Element.el [ Element.Font.size 16, Element.width Element.fill ] <|
+            Element.text event.name
+        , Element.paragraph
+            [ Element.Font.size 16
+            , Element.scrollbarX
+            , Element.height <| Element.px 200
+            , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
+            ]
+            [ Element.text event.output ]
         ]
 
 
 executionEnteredView : StateEnteredDetails -> Element msg
 executionEnteredView event =
-    Element.row
-        [ Element.scrollbarX
-        , Element.padding 16
+    Element.column
+        [ Element.padding 16
+        , Element.height <| Element.px 250
+        , Element.spacing 16
         ]
         [ Element.el [ Element.Font.size 16 ] <| Element.text event.name
-        , Element.el [ Element.Font.size 16 ] <| Element.text event.input
+        , Element.paragraph
+            [ Element.Font.size 16
+            , Element.scrollbarX
+            , Element.height <| Element.px 200
+            , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
+            ]
+            [ Element.text event.input ]
         ]
 
 
@@ -586,6 +861,18 @@ executionStartView event =
 
 executionHistoryView : Model -> Element Msg
 executionHistoryView model =
+    let
+        executionId =
+            case model.active of
+                StateMachineView ->
+                    "Events"
+
+                ExecutionsView _ ->
+                    "Events"
+
+                ExecutionHistoryView execution ->
+                    "Events for \"" ++ execution.executionArn ++ "\""
+    in
     Element.column
         [ Element.width Element.fill
         , Element.paddingEach Constants.standardPadding16
@@ -594,7 +881,7 @@ executionHistoryView model =
         , Element.Border.rounded 4
         ]
         [ Element.row [ Element.width Element.fill ]
-            [ Element.el [ Element.alignLeft, Element.Font.bold ] <| Element.text "Events"
+            [ Element.el [ Element.alignLeft, Element.Font.bold ] <| Element.text executionId
             , Element.row [ Element.alignRight, Element.spacing 16 ]
                 [ Element.Input.button []
                     { label =
@@ -605,14 +892,14 @@ executionHistoryView model =
                     , onPress =
                         case model.active of
                             StateMachineView ->
-                                Just <| NoOp
+                                Nothing
 
                             ExecutionsView _ ->
-                                Just <| NoOp
+                                Nothing
 
                             ExecutionHistoryView execution ->
                                 Just <|
-                                    FetchStateMachine "eu-west-2" execution.stateMachineArn
+                                    FetchStateMachine london execution.stateMachineArn
                     }
                 , Element.Input.button []
                     { label =
@@ -620,7 +907,7 @@ executionHistoryView model =
                             { src = "src/static/refresh.svg"
                             , description = "Refresh Events button"
                             }
-                    , onPress = Just <| FetchEvents
+                    , onPress = Just FetchEvents
                     }
                 ]
             ]
@@ -661,7 +948,7 @@ body model =
 layout : Model -> Element Msg
 layout model =
     Element.column [ Element.width Element.fill ]
-        [ header
+        [ header model
         , body model
         ]
 
@@ -671,54 +958,63 @@ layout model =
 
 
 init : Flags -> Url -> Key -> ( Model, Cmd Msg )
-init flags url navKey =
+init _ _ _ =
     ( { stateMachines = Loading
       , active = StateMachineView
       , executions = NotAsked
       , events = NotAsked
+      , notifications = Hidden []
+      , randomInt = 1
       }
     , Cmd.batch
-        [ getStateMachines "eu-west-2"
-        ]
+        [ getStateMachines london ]
     )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        ChangeUrl url ->
+        ChangeUrl _ ->
             ( model, Cmd.none )
 
-        ClickLink urlRequest ->
+        ClickLink _ ->
             ( model, Cmd.none )
 
         HandleFetchingStateMachines webData ->
             let
-                data =
+                ( data, cmd ) =
                     case webData of
                         NotAsked ->
-                            NotAsked
+                            ( NotAsked, Cmd.none )
 
                         Loading ->
-                            Loading
+                            ( Loading, Cmd.none )
 
                         Failure e ->
-                            Failure e
+                            ( Failure e
+                            , perform <|
+                                PostErrorNotification
+                                    ("ERROR: Fetching state machines failed (" ++ toString e ++ ").")
+                            )
 
                         Success response ->
-                            Success response.stateMachines
+                            ( Success response.stateMachines
+                            , perform <| PostInfoNotification "Got the State Machines!"
+                            )
             in
-            ( { model | stateMachines = data }, Cmd.none )
+            ( { model | stateMachines = data }
+            , cmd
+            )
 
         NoOp ->
             ( model, Cmd.none )
 
         FetchStateMachines ->
-            ( { model | stateMachines = Loading }, getStateMachines "eu-west-2" )
+            ( { model | stateMachines = Loading }, getStateMachines london )
 
         SelectStateMachine stateMachine ->
             ( { model | active = ExecutionsView stateMachine, executions = Loading }
-            , getStateMachineExecutions "eu-west-2" stateMachine.stateMachineArn
+            , getStateMachineExecutions london stateMachine.stateMachineArn
             )
 
         SelectView active ->
@@ -726,22 +1022,31 @@ update msg model =
 
         HandleFetchingStateMachineExecutions webData ->
             let
-                data =
+                ( data, cmd ) =
                     case webData of
                         NotAsked ->
-                            NotAsked
+                            ( NotAsked, Cmd.none )
 
                         Loading ->
-                            Loading
+                            ( Loading, Cmd.none )
 
                         Failure e ->
-                            Failure e
+                            ( Failure e
+                            , perform <|
+                                PostErrorNotification <|
+                                    "ERROR: Failed to fetch executions ("
+                                        ++ toString e
+                                        ++ ")."
+                            )
 
                         Success response ->
-                            Success response.executions
+                            ( Success response.executions
+                            , perform <| PostInfoNotification <| "Got the executions!"
+                            )
             in
-            ( { model | executions = data }, Cmd.none )
+            ( { model | executions = data }, cmd )
 
+        -- Random.generate GotSeed <| Random.int 1 1000000
         FetchStateMachinesExecutions ->
             let
                 cmd =
@@ -750,7 +1055,7 @@ update msg model =
                             Cmd.none
 
                         ExecutionsView stateMachine ->
-                            getStateMachineExecutions "eu-west-2" stateMachine.stateMachineArn
+                            getStateMachineExecutions london stateMachine.stateMachineArn
 
                         ExecutionHistoryView _ ->
                             Cmd.none
@@ -759,35 +1064,70 @@ update msg model =
 
         HandleFetchingEvents webData ->
             let
-                events =
+                ( events, cmd ) =
                     case webData of
                         NotAsked ->
-                            NotAsked
+                            ( NotAsked, Cmd.none )
 
                         Loading ->
-                            Loading
+                            ( Loading, Cmd.none )
 
                         Failure e ->
-                            Failure e
+                            ( Failure e
+                            , perform <|
+                                PostErrorNotification <|
+                                    "ERROR: Fetching events failed ("
+                                        ++ toString e
+                                        ++ ")."
+                            )
 
                         Success response ->
-                            Success response.events
+                            ( Success response.events
+                            , perform <| PostInfoNotification "Got the events!"
+                            )
             in
-            ( { model | events = events }, Cmd.none )
+            ( { model | events = events }
+            , cmd
+            )
 
         SelectExecution execution ->
             ( { model | active = ExecutionHistoryView execution, events = Loading }
-            , getEvents "eu-west-2" execution.executionArn
+            , getEvents london execution.executionArn
             )
 
-        HandleDeleteStateMachine _ ->
+        HandleDeleteStateMachine webData ->
+            let
+                cmd =
+                    case webData of
+                        Loading ->
+                            Cmd.none
+
+                        NotAsked ->
+                            Cmd.none
+
+                        Failure e ->
+                            perform <|
+                                PostErrorNotification <|
+                                    "ERROR: Failed to delete State Machine. ("
+                                        ++ toString e
+                                        ++ ")"
+
+                        Success _ ->
+                            perform <|
+                                PostInfoNotification "State Machine was deleted successfully!"
+            in
             ( { model
                 | active = StateMachineView
                 , stateMachines = Loading
                 , executions = NotAsked
                 , events = NotAsked
               }
-            , getStateMachines "eu-west-2"
+            , Cmd.batch
+                [ getStateMachines london
+
+                --, Random.generate GotSeed <| Random.int 1 1000000
+                , cmd
+                ]
             )
 
         DeleteStateMachine region arn ->
@@ -804,24 +1144,233 @@ update msg model =
                             Cmd.none
 
                         ExecutionHistoryView execution ->
-                            getEvents "eu-west-2" execution.executionArn
+                            getEvents london execution.executionArn
             in
             ( { model | events = Loading }, cmd )
 
         HandleFetchingStateMachine webData ->
             let
-                active =
+                ( active, cmd ) =
                     case webData of
                         Success stateMachine ->
-                            ExecutionsView stateMachine
+                            ( ExecutionsView stateMachine
+                            , perform <|
+                                PostInfoNotification <|
+                                    "Got \""
+                                        ++ stateMachine.name
+                                        ++ "\"."
+                            )
+
+                        Failure errorStatus ->
+                            ( model.active
+                            , perform <|
+                                PostErrorNotification <|
+                                    "ERROR: Failed to get state machine information ("
+                                        ++ toString errorStatus
+                                        ++ ")"
+                            )
 
                         _ ->
-                            model.active
+                            ( model.active, Cmd.none )
             in
-            ( { model | active = active }, Cmd.none )
+            ( { model | active = active }
+            , cmd
+              --Random.generate GotSeed <| Random.int 1 1000000
+            )
 
         FetchStateMachine region arn ->
             ( model, getStateMachine region arn )
+
+        StopRunningExecution region arn ->
+            ( model, stopRunningExecution region arn )
+
+        HandlePostMachine webData ->
+            let
+                cmd =
+                    case webData of
+                        NotAsked ->
+                            Cmd.none
+
+                        Loading ->
+                            Cmd.none
+
+                        Failure e ->
+                            perform <|
+                                PostErrorNotification <|
+                                    "ERROR: Execution failed to stop. ("
+                                        ++ toString e
+                                        ++ ")"
+
+                        Success _ ->
+                            case model.active of
+                                StateMachineView ->
+                                    Cmd.none
+
+                                ExecutionsView stateMachine ->
+                                    getStateMachineExecutions london stateMachine.stateMachineArn
+
+                                ExecutionHistoryView _ ->
+                                    Cmd.none
+            in
+            ( model, cmd )
+
+        ClearNotification uuid ->
+            let
+                notifications =
+                    case model.notifications of
+                        Cleared ->
+                            []
+
+                        Visible n ->
+                            n
+
+                        Hidden n ->
+                            n
+
+                filteredNotifications =
+                    List.filter
+                        (\notification ->
+                            isSameNotification notification uuid
+                        )
+                        notifications
+
+                modelNotifications =
+                    case List.length filteredNotifications of
+                        0 ->
+                            Hidden filteredNotifications
+
+                        _ ->
+                            Visible filteredNotifications
+            in
+            ( { model | notifications = modelNotifications }, Cmd.none )
+
+        PostErrorNotification message ->
+            let
+                uuid =
+                    Random.step UUID.generator (Random.initialSeed model.randomInt)
+                        |> Tuple.first
+
+                notification =
+                    ErrorNotification { message = message, uuid = uuid }
+
+                modelNotifications =
+                    case model.notifications of
+                        Hidden n ->
+                            Hidden (List.append [ notification ] n)
+
+                        Visible n ->
+                            Visible (List.append [ notification ] n)
+
+                        Cleared ->
+                            Cleared
+
+                -- notifications =
+                --     List.append [ notification ] modelNotifications
+            in
+            ( { model | notifications = modelNotifications }
+            , Random.generate GotSeed <| Random.int 1 1000000
+            )
+
+        PostSuccessNotification message ->
+            let
+                uuid =
+                    Random.step UUID.generator (Random.initialSeed model.randomInt)
+                        |> Tuple.first
+
+                notification =
+                    SuccessNotification { message = message, uuid = uuid }
+
+                modelNotifications =
+                    case model.notifications of
+                        Hidden n ->
+                            Hidden (List.append [ notification ] n)
+
+                        Visible n ->
+                            Visible (List.append [ notification ] n)
+
+                        Cleared ->
+                            Cleared
+
+                -- notifications =
+                --     List.append [ notification ] model.notifications
+            in
+            ( { model | notifications = modelNotifications }
+            , Random.generate GotSeed <| Random.int 1 1000000
+            )
+
+        PostInfoNotification message ->
+            let
+                uuid =
+                    Random.step UUID.generator (Random.initialSeed model.randomInt)
+                        |> Tuple.first
+
+                notification =
+                    InfoNotification { message = message, uuid = uuid }
+
+                modelNotifications =
+                    case model.notifications of
+                        Hidden n ->
+                            Hidden (List.append [ notification ] n)
+
+                        Visible n ->
+                            Visible (List.append [ notification ] n)
+
+                        Cleared ->
+                            Cleared
+            in
+            ( { model | notifications = modelNotifications }
+            , Random.generate GotSeed <| Random.int 1 1000000
+            )
+
+        GotSeed int ->
+            ( { model | randomInt = int }, Cmd.none )
+
+        ShowNotifications ->
+            let
+                notifications =
+                    case model.notifications of
+                        Visible n ->
+                            Visible n
+
+                        Hidden n ->
+                            Visible n
+
+                        Cleared ->
+                            Cleared
+            in
+            ( { model | notifications = notifications }, Cmd.none )
+
+        HideNotifications ->
+            let
+                notifications =
+                    case model.notifications of
+                        Visible n ->
+                            Hidden n
+
+                        Hidden n ->
+                            Hidden n
+
+                        Cleared ->
+                            Cleared
+            in
+            ( { model | notifications = notifications }, Cmd.none )
+
+
+isSameNotification : Notification -> UUID -> Bool
+isSameNotification notification compareUuid =
+    let
+        uuid =
+            case notification of
+                ErrorNotification baseNotification ->
+                    baseNotification.uuid
+
+                InfoNotification baseNotification ->
+                    baseNotification.uuid
+
+                SuccessNotification baseNotification ->
+                    baseNotification.uuid
+    in
+    UUID.compare compareUuid uuid /= EQ
 
 
 view : Model -> Document Msg

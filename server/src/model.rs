@@ -43,7 +43,7 @@ pub struct Event {
     pub kind: String,
     pub id: u64,
     #[serde(rename = "previousEventId")]
-    pub previous_vent_id: u16,
+    pub previous_event_id: Option<u16>,
     #[serde(rename = "executionStartedEventDetails")]
     pub execution_started_event_details: Option<ExecutionStartedEventDetails>,
     #[serde(rename = "stateEnteredEventDetails")]

@@ -4,9 +4,10 @@ import Json.Decode as Jdec
 import Json.Decode.Pipeline as Jpipe
 import Json.Encode
 import RemoteData.Http as RemoteHttp exposing (Config, acceptJson, defaultConfig)
-import Types exposing (Base, Event(..), EventsResponse, Execution, LambdaFunctionFailed, LambdaFunctionFailedDetails, LambdaFunctionScheduled, LambdaScheduledDetails, Msg(..), StartedEvent, StartedEventDetails, StateEntered, StateEnteredDetails, StateExited, StateExitedDetails, StateMachine, StateMachineExecutionsResponse, StateMachineResponse, SucceededEvent, SucceededEventDetails)
+import Types exposing (Base, Event(..), EventsResponse, Execution, LambdaFunctionFailed, LambdaFunctionFailedDetails, LambdaFunctionScheduled, LambdaScheduledDetails, Msg(..), Region(..), StartedEvent, StartedEventDetails, StateEntered, StateEnteredDetails, StateExited, StateExitedDetails, StateMachine, StateMachineExecutionsResponse, StateMachineResponse, SucceededEvent, SucceededEventDetails)
 
 
+baseUrl : String
 baseUrl =
     "http://localhost:6969"
 
@@ -20,44 +21,53 @@ jsonConfig =
 -- ENDPOINTS
 
 
-getStateMachines : String -> Cmd Msg
-getStateMachines region =
+getStateMachines : Region -> Cmd Msg
+getStateMachines (Region region) =
     RemoteHttp.getWithConfig jsonConfig
         (baseUrl ++ "/" ++ region ++ "/state-machines")
         HandleFetchingStateMachines
         stateMachinesResponseDecoder
 
 
-getStateMachine : String -> String -> Cmd Msg
-getStateMachine region arn =
+getStateMachine : Region -> String -> Cmd Msg
+getStateMachine (Region region) arn =
     RemoteHttp.getWithConfig jsonConfig
         (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/state-machine")
         HandleFetchingStateMachine
         stateMachineDecoder
 
 
-getStateMachineExecutions : String -> String -> Cmd Msg
-getStateMachineExecutions region arn =
+getStateMachineExecutions : Region -> String -> Cmd Msg
+getStateMachineExecutions (Region region) arn =
     RemoteHttp.getWithConfig jsonConfig
         (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/executions")
         HandleFetchingStateMachineExecutions
         stateMachineExecutionsResponseDecoder
 
 
-getEvents : String -> String -> Cmd Msg
-getEvents region arn =
+getEvents : Region -> String -> Cmd Msg
+getEvents (Region region) arn =
     RemoteHttp.getWithConfig jsonConfig
         (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/history")
         HandleFetchingEvents
         eventsResponse
 
 
-deleteStateMachine : String -> String -> Cmd Msg
-deleteStateMachine region arn =
+deleteStateMachine : Region -> String -> Cmd Msg
+deleteStateMachine (Region region) arn =
     RemoteHttp.deleteWithConfig jsonConfig
         (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/state-machine")
         HandleDeleteStateMachine
-        (Json.Encode.string "")
+        Json.Encode.null
+
+
+stopRunningExecution : Region -> String -> Cmd Msg
+stopRunningExecution (Region region) arn =
+    RemoteHttp.postWithConfig jsonConfig
+        (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/stop-execution")
+        HandlePostMachine
+        Jdec.int
+        Json.Encode.null
 
 
 
@@ -93,7 +103,7 @@ succeededDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
@@ -119,7 +129,7 @@ lambdaFailedDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" lambdaFailedDetailsDecoder)
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
@@ -146,7 +156,7 @@ baseEventDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
@@ -166,7 +176,7 @@ lambdaScheduledDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" lambdaScheduledDetailsDecoder)
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
@@ -193,7 +203,7 @@ stateExitedDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" stateExitedDetailsDecoder)
     in
@@ -220,7 +230,7 @@ stateEnteredDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" stateEnteredDetailsDecoder)
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
@@ -247,7 +257,7 @@ startEventDecoder =
                 (Jdec.field "id" Jdec.int)
                 (Jdec.field "lambdaFunctionFailedEventDetails" <| Jdec.null ())
                 (Jdec.field "lambdaFunctionScheduledEventDetails" <| Jdec.null ())
-                (Jdec.field "previousEventId" Jdec.int)
+                (Jdec.maybe (Jdec.field "previousEventId" Jdec.int))
                 (Jdec.field "stateEnteredEventDetails" <| Jdec.null ())
                 (Jdec.field "stateExitedEventDetails" <| Jdec.null ())
     in
