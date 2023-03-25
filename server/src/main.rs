@@ -1,5 +1,5 @@
 use crate::model::{
-    EventResponse, ExecutionsResponse, ServerError, StateMachine, StateMachineResponse,
+     EventResponse, ExecutionsResponse, ServerError, StateMachine, StateMachineResponse,
 };
 use actix_cors::Cors;
 use actix_web::http::header::ContentType;

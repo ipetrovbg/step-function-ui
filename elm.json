@@ -17,6 +17,7 @@
             "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
             "elm/url": "1.0.0",
+            "klazuka/elm-json-tree-view": "2.1.0",
             "krisajenkins/remotedata": "6.0.1",
             "mdgriffith/elm-ui": "1.1.8",
             "ohanhi/remotedata-http": "4.0.0"

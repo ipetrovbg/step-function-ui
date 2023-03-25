@@ -1,6 +1,14 @@
 module Main exposing (..)
 
-import Api exposing (deleteStateMachine, getEvents, getStateMachine, getStateMachineExecutions, getStateMachines, stopRunningExecution)
+import Api
+    exposing
+        ( deleteStateMachine
+        , getEvents
+        , getStateMachine
+        , getStateMachineExecutions
+        , getStateMachines
+        , stopRunningExecution
+        )
 import Browser exposing (Document)
 import Browser.Navigation exposing (Key)
 import Colors
@@ -12,9 +20,30 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Html.Attributes
+import JsonTree
 import Random
 import RemoteData exposing (RemoteData(..), WebData)
-import Types exposing (Active(..), Base, BaseNotification, Event(..), Execution, Flags, LambdaFunctionFailedDetails, LambdaScheduledDetails, Model, Msg(..), Notification(..), NotificationVisibility(..), Region(..), StartedEventDetails, StateEnteredDetails, StateExitedDetails, StateMachine, SucceededEventDetails)
+import Types
+    exposing
+        ( Active(..)
+        , Base
+        , BaseNotification
+        , Event(..)
+        , Execution
+        , Flags
+        , LambdaFunctionFailedDetails
+        , LambdaScheduledDetails
+        , Model
+        , Msg(..)
+        , Notification(..)
+        , NotificationVisibility(..)
+        , Region(..)
+        , StartedEventDetails
+        , StateEnteredDetails
+        , StateExitedDetails
+        , StateMachine
+        , SucceededEventDetails
+        )
 import UUID exposing (UUID)
 import Url exposing (Url)
 import Utils exposing (perform)
@@ -24,7 +53,9 @@ errorNotificationView : BaseNotification -> Element Msg
 errorNotificationView error =
     Element.row
         [ Element.width Element.fill
-        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Background.color <|
+            Colors.whiteColor <|
+                Just 1
         , Element.Border.rounded 4
         ]
         [ Element.row
@@ -54,12 +85,16 @@ infoNotificationView : BaseNotification -> Element Msg
 infoNotificationView notification =
     Element.row
         [ Element.width Element.fill
-        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Background.color <|
+            Colors.whiteColor <|
+                Just 1
         , Element.Border.rounded 4
         ]
         [ Element.row
             [ Element.width Element.fill
-            , Element.Background.color <| Colors.primaryColor <| Just 0.2
+            , Element.Background.color <|
+                Colors.primaryColor <|
+                    Just 0.2
             ]
             [ Element.el
                 [ Element.Font.color <| Colors.darkBody <| Just 1.0
@@ -86,7 +121,9 @@ successNotificationView : BaseNotification -> Element Msg
 successNotificationView notification =
     Element.row
         [ Element.width Element.fill
-        , Element.Background.color <| Colors.whiteColor <| Just 1
+        , Element.Background.color <|
+            Colors.whiteColor <|
+                Just 1
         , Element.Border.rounded 4
         ]
         [ Element.row
@@ -245,7 +282,7 @@ header model =
 
 stateMachineDataView : List StateMachine -> Element Msg
 stateMachineDataView stateMachines =
-    Element.table []
+    Element.table [ Element.spacing 16 ]
         { data = stateMachines
         , columns =
             [ { header =
@@ -345,7 +382,7 @@ stateMachinesView stateMachine =
                 [ Element.el [ Element.width Element.fill ] <|
                     Element.row [ Element.width Element.fill ]
                         [ Element.el [ Element.Font.bold, Element.alignLeft ] <|
-                            Element.text "State Machines:"
+                            Element.text "State Machines"
                         , Element.Input.button [ Element.alignRight ]
                             { onPress = Just FetchStateMachines
                             , label =
@@ -378,7 +415,11 @@ getStatusColor status =
 
 executionsTableView : List Execution -> Element Msg
 executionsTableView executions =
-    Element.table [ Element.paddingXY 0 16, Element.width Element.fill ]
+    Element.table
+        [ Element.paddingXY 0 16
+        , Element.spacing 16
+        , Element.width Element.fill
+        ]
         { data = executions
         , columns =
             [ { header =
@@ -525,8 +566,10 @@ executionsView model =
         , Element.Border.width 1
         , Element.Border.rounded 4
         ]
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.el [ Element.alignLeft, Element.Font.bold ] <| Element.text "Executions:"
+        [ Element.row
+            [ Element.width Element.fill
+            ]
+            [ Element.el [ Element.alignLeft, Element.Font.bold ] <| Element.text "Executions"
             , Element.row [ Element.alignRight, Element.spacing 16 ]
                 [ Element.Input.button []
                     { label =
@@ -633,6 +676,7 @@ executionHistoryTableView events =
         , Element.width Element.fill
         , Element.height <| Element.px 680
         , Element.scrollbarX
+        , Element.spacing 16
         ]
         { data = events
         , columns =
@@ -811,41 +855,57 @@ lambdaScheduledView event =
         ]
 
 
-stateExitedView : StateExitedDetails -> Element msg
+stateExitedView : StateExitedDetails -> Element Msg
 stateExitedView event =
     Element.column
         [ Element.padding 16
         , Element.height <| Element.px 250
         , Element.spacing 16
+        , Element.Border.width 1
+        , Element.Border.color <| Colors.lightBody <| Just 1.0
         ]
         [ Element.el [ Element.Font.size 16, Element.width Element.fill ] <|
-            Element.text event.name
+            Element.text <|
+                event.name
+                    ++ " - Output"
         , Element.paragraph
             [ Element.Font.size 16
             , Element.scrollbarX
             , Element.height <| Element.px 200
             , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
             ]
-            [ Element.text event.output ]
+            [ JsonTree.parseString event.output
+                |> Result.map (\tree -> JsonTree.view tree (config NoOp) JsonTree.defaultState |> Element.html)
+                |> Result.withDefault (Element.text "Failed to parse JSON")
+            ]
         ]
 
 
-executionEnteredView : StateEnteredDetails -> Element msg
+executionEnteredView : StateEnteredDetails -> Element Msg
 executionEnteredView event =
     Element.column
         [ Element.padding 16
         , Element.height <| Element.px 250
         , Element.spacing 16
+        , Element.Border.width 1
+        , Element.Border.color <| Colors.lightBody <| Just 1.0
         ]
-        [ Element.el [ Element.Font.size 16 ] <| Element.text event.name
+        [ Element.el [ Element.Font.size 16 ] <| Element.text <| event.name ++ " - Input"
         , Element.paragraph
             [ Element.Font.size 16
             , Element.scrollbarX
             , Element.height <| Element.px 200
             , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
             ]
-            [ Element.text event.input ]
+            [ JsonTree.parseString event.input
+                |> Result.map (\tree -> JsonTree.view tree (config NoOp) JsonTree.defaultState |> Element.html)
+                |> Result.withDefault (Element.text "Failed to parse JSON")
+            ]
         ]
+
+
+config m =
+    { onSelect = Nothing, toMsg = always m, colors = JsonTree.defaultColors }
 
 
 executionStartView : StartedEventDetails -> Element msg
@@ -880,8 +940,19 @@ executionHistoryView model =
         , Element.Border.width 1
         , Element.Border.rounded 4
         ]
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.el [ Element.alignLeft, Element.Font.bold ] <| Element.text executionId
+        [ Element.row
+            [ Element.width Element.fill
+            , Element.spaceEvenly
+            ]
+            [ Element.el
+                [ Element.alignLeft
+                , Element.Font.bold
+                , Element.width Element.fill
+                , Element.scrollbarX
+                , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
+                ]
+              <|
+                Element.text executionId
             , Element.row [ Element.alignRight, Element.spacing 16 ]
                 [ Element.Input.button []
                     { label =
