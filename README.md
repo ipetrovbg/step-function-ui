@@ -1,5 +1,5 @@
 # Step Functions Local UI
-If you've ever used `serverless-step-functions-local` plugin for serverless framework, it's probable that you've desired some form of visualization for your local step function executions.
+If you've ever used `serverless-step-functions-local` plugin for the serverless framework, it's probable that you've desired some form of visualization for your local step function executions.
 
 Well, this is it 🤟
 
