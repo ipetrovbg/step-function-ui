@@ -1,13 +1,15 @@
-use crate::model::{
-     EventResponse, ExecutionsResponse, ServerError, StateMachine, StateMachineResponse,
+use crate::model:: {
+      EventResponse, ExecutionsResponse, ServerError, StateMachine, StateMachineResponse, StateMachineDefinition
 };
 use actix_cors::Cors;
 use actix_web::http::header::ContentType;
-use actix_web::{delete, get, http, post, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{  delete, get, http, post, web, App, HttpRequest, HttpResponse, HttpServer};
 use std::process::Command;
 use std::str;
 
 mod model;
+
+const PORT: u16 = 6969;
 
 #[get("/{region}/state-machines")]
 async fn get_state_machines(region: web::Path<String>) -> HttpResponse {
@@ -225,7 +227,7 @@ async fn stop_execution(req: HttpRequest) -> HttpResponse {
 
     return match Command::new("sh")
         .arg("-c")
-        .arg(format!("aws stepfunctions stop-execution --endpoint-url http://localhost:8083 --region {} --execution-arn {} --cause \"Manual Step Functions Local stop\" --error ManualStop", region.as_str(), arn.as_str()))
+        .arg(format!("aws stepfunctions stop-execution --endpoint-url http://localhost:8083 --region {} --execution-arn {} --cause \"manual step functions local stop\" --error manualstop", region.as_str(), arn.as_str()))
         .output() {
         Ok(o) => {
             println!("[STOP EXECUTION]: {:?}", o);
@@ -247,8 +249,63 @@ async fn stop_execution(req: HttpRequest) -> HttpResponse {
     };
 }
 
+#[get("/{region}/{arn}/describe")]
+async fn describe_execution(req: HttpRequest) -> HttpResponse {
+    let region: String = req.match_info().get("region").unwrap().parse().unwrap();
+    let arn: String = req.match_info().get("arn").unwrap().parse().unwrap();
+
+    println!("[DESCRIBE EXECUTION]: {} {}", region, arn);
+
+    return match Command::new("sh")
+        .arg("-c")
+        .arg(format!("aws stepfunctions describe-state-machine-for-execution --endpoint-url http://localhost:8083 --region {} --execution-arn {}", region.as_str(), arn.as_str()))
+        .output() {
+            Ok(o) => {
+                println!("[DESCRIBE EXECUTION]: {:?}", o);
+
+                if o.status.success() {
+                    match str::from_utf8(&o.stdout) {
+                        Ok(output) => {
+                            match serde_json::from_str::<model::StateMachineDescriptor>(output) {
+                                Ok(o) => {
+                                    match serde_json::from_str::<StateMachineDefinition>(&o.definition) {
+                                        Ok(definition) => 
+                                            HttpResponse::Ok()
+                                                .content_type(ContentType::json())
+                                                .json(definition),
+                                        Err(e) => 
+                                            HttpResponse::InternalServerError()
+                                                .content_type(ContentType::json())
+                                                .json(ServerError {message: format!("ERROR: Failed to parse step machine definition. {:?}", e)})
+                                    }
+                                },
+                                Err(e) => 
+                                    HttpResponse::InternalServerError()
+                                        .content_type(ContentType::json())
+                                        .json(ServerError {message: format!("ERROR: Failed to parse step machine descriptor response. {:?}", e)})
+                            }
+                        },
+                        Err(error) => HttpResponse::InternalServerError()
+                            .content_type(ContentType::json())
+                            .json(ServerError {message: format!("ERROR: Output convert failed due to: {error}")})
+                    }
+                } else {
+                    HttpResponse::InternalServerError()
+                        .content_type(ContentType::json())
+                        .json(ServerError {message: format!("ERROR: Step Function exited with status code: {}", o.status.code().unwrap())})
+                }
+            }
+            Err(e) => 
+                HttpResponse::InternalServerError()
+                    .content_type(ContentType::json())
+                    .json(ServerError {message: format!("ERROR: Executing Step Function CLI \"describe-state-machine-for-execution\" command. {:?}", e)})
+        }
+}
+
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    println!("Starting server at port: {}", PORT);
+
     HttpServer::new(|| {
         let cors = Cors::default()
             .allowed_origin("http://localhost:8080")
@@ -256,16 +313,18 @@ async fn main() -> std::io::Result<()> {
             .allowed_header(http::header::CONTENT_TYPE)
             .allow_any_method();
 
+
         App::new()
             .wrap(cors)
             .service(get_state_machines)
             .service(get_state_machine)
             .service(get_executions)
             .service(execution)
+            .service(describe_execution)
             .service(stop_execution)
             .service(delete_state_machine)
     })
-    .bind(("127.0.0.1", 6969))?
+    .bind(("127.0.0.1", PORT))?
     .run()
-    .await
+    .await 
 }

@@ -30,5 +30,12 @@ cd server | cargo run
 
 #### Start FE on port `8080`
 ```shell
-npm run start:dev
+npm start
+```
+
+#### Start Both with just file
+If you have [just](https://github.com/casey/just) installed on your machine, you can run:
+
+```
+just start <aws-vault profile>
 ```

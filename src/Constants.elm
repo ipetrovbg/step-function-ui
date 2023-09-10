@@ -5,7 +5,8 @@ module Constants exposing
     , each
     , executionHistoryWidth
     , executionsWidth
-    , london
+    , londonRegion
+    , movingGraphDistance
     , rectRoundValue
     , standardPadding16
     , toString
@@ -14,14 +15,19 @@ module Constants exposing
 import Types exposing (Region(..))
 
 
-london : Region
-london =
+londonRegion : Region
+londonRegion =
     Region "eu-west-2"
 
 
 rectRoundValue : Int
 rectRoundValue =
-    8
+    4
+
+
+movingGraphDistance : Int
+movingGraphDistance =
+    25
 
 
 borderWidth : Int
@@ -55,7 +61,7 @@ executionsWidth =
 
 executionHistoryWidth : Int
 executionHistoryWidth =
-    1200
+    1600
 
 
 each =

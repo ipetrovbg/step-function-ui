@@ -1,15 +1,21 @@
 module Api exposing (..)
 
+import Debug exposing (toString)
 import Json.Decode as Jdec
 import Json.Decode.Pipeline as Jpipe
 import Json.Encode
 import RemoteData.Http as RemoteHttp exposing (Config, acceptJson, defaultConfig)
-import Types exposing (Base, Event(..), EventsResponse, Execution, LambdaFunctionFailed, LambdaFunctionFailedDetails, LambdaFunctionScheduled, LambdaScheduledDetails, Msg(..), Region(..), StartedEvent, StartedEventDetails, StateEntered, StateEnteredDetails, StateExited, StateExitedDetails, StateMachine, StateMachineExecutionsResponse, StateMachineResponse, SucceededEvent, SucceededEventDetails)
+import Types exposing (Base, ChoiceBranch, ChoiceModel, Event(..), EventsResponse, Execution, LambdaFunctionFailed, LambdaFunctionFailedDetails, LambdaFunctionScheduled, LambdaScheduledDetails, Msg(..), Region(..), StartedEvent, StartedEventDetails, StateEntered, StateEnteredDetails, StateExited, StateExitedDetails, StateMachine, StateMachineDescriptor, StateMachineExecutionsResponse, StateMachineResponse, StateMachineState(..), SucceededEvent, SucceededEventDetails)
+
+
+serverPort : Int
+serverPort =
+    6969
 
 
 baseUrl : String
 baseUrl =
-    "http://localhost:6969"
+    "http://localhost:" ++ toString serverPort
 
 
 jsonConfig : Config
@@ -70,8 +76,49 @@ stopRunningExecution (Region region) arn =
         Json.Encode.null
 
 
+describeStateMachineForExecution : Region -> String -> Cmd Msg
+describeStateMachineForExecution (Region region) arn =
+    RemoteHttp.getWithConfig jsonConfig
+        (baseUrl ++ "/" ++ region ++ "/" ++ arn ++ "/describe")
+        HandleDescribeStateMachine
+        descibeStateMachineDecoder
+
+
 
 -- DECODERS
+
+
+stateDecoder : Jdec.Decoder StateMachineState
+stateDecoder =
+    Jdec.oneOf
+        [ Jdec.map Choice <| choiceStateDecoder
+        ]
+
+
+choicesBranchDecoder : Jdec.Decoder ChoiceBranch
+choicesBranchDecoder =
+    Jdec.map4 ChoiceBranch
+        (Jdec.field "Variable" Jdec.string)
+        (Jdec.maybe (Jdec.field "IsPresent" Jdec.bool))
+        (Jdec.field "BooleanEquals" Jdec.bool)
+        (Jdec.field "Next" Jdec.string)
+
+
+choiceStateDecoder : Jdec.Decoder ChoiceModel
+choiceStateDecoder =
+    Jdec.map4 ChoiceModel
+        (Jdec.field "Type" Jdec.string)
+        (Jdec.maybe (Jdec.field "End" Jdec.bool))
+        (Jdec.maybe (Jdec.field "Next" Jdec.string))
+        (Jdec.maybe (Jdec.field "Choices" <| Jdec.list choicesBranchDecoder))
+
+
+descibeStateMachineDecoder : Jdec.Decoder StateMachineDescriptor
+descibeStateMachineDecoder =
+    Jdec.map3 StateMachineDescriptor
+        (Jdec.field "Comment" Jdec.string)
+        (Jdec.field "StartAt" Jdec.string)
+        (Jdec.field "States" <| Jdec.dict stateDecoder)
 
 
 eventsResponse : Jdec.Decoder EventsResponse

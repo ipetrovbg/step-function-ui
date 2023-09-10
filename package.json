@@ -5,8 +5,7 @@
   "main": "webpack-dev.config.js",
   "scripts": {
     "build": "webpack --config webpack.config.js",
-    "start": "webpack-dev-server --config webpack.config.js",
-    "start:dev": "echo y | npm run format && webpack-dev-server --config webpack-dev.config.js",
+    "start": "echo y | npm run format && webpack-dev-server --config webpack-dev.config.js",
     "format": "echo y | elm-format src"
   },
   "devDependencies": {

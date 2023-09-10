@@ -2,6 +2,8 @@ module Types exposing
     ( Active(..)
     , Base
     , BaseNotification
+    , ChoiceBranch
+    , ChoiceModel
     , Event(..)
     , EventsResponse
     , Execution
@@ -10,10 +12,13 @@ module Types exposing
     , LambdaFunctionFailedDetails
     , LambdaFunctionScheduled
     , LambdaScheduledDetails
+    , LinePoint
     , Model
     , Msg(..)
+    , NodeKind(..)
     , Notification(..)
     , NotificationVisibility(..)
+    , Point
     , Region(..)
     , StartedEvent
     , StartedEventDetails
@@ -22,13 +27,16 @@ module Types exposing
     , StateExited
     , StateExitedDetails
     , StateMachine
+    , StateMachineDescriptor
     , StateMachineExecutionsResponse
     , StateMachineResponse
+    , StateMachineState(..)
     , SucceededEvent
     , SucceededEventDetails
     )
 
 import Browser exposing (UrlRequest)
+import Dict exposing (Dict)
 import RemoteData exposing (WebData)
 import UUID exposing (UUID)
 import Url exposing (Url)
@@ -190,6 +198,33 @@ type alias SucceededEvent =
     }
 
 
+type alias ChoiceBranch =
+    { variable : String
+    , isPresent : Maybe Bool
+    , booleanEquals : Bool
+    , next : String
+    }
+
+
+type alias ChoiceModel =
+    { kind : String
+    , end : Maybe Bool
+    , next : Maybe String
+    , choices : Maybe (List ChoiceBranch)
+    }
+
+
+type StateMachineState
+    = Choice ChoiceModel
+
+
+type alias StateMachineDescriptor =
+    { comment : String
+    , startAt : String
+    , states : Dict String StateMachineState
+    }
+
+
 type Event
     = Start StartedEvent
     | Entered StateEntered
@@ -220,6 +255,7 @@ type Active
     = StateMachineView
     | ExecutionsView StateMachine
     | ExecutionHistoryView Execution
+    | ExecutionHistoryGraphView Execution
 
 
 type alias BaseNotification =
@@ -244,13 +280,34 @@ type NotificationVisibility
     | Cleared
 
 
+type NodeKind
+    = Rect Point
+    | Line LinePoint
+
+
+type alias LinePoint =
+    { x1 : Int
+    , x2 : Int
+    , y1 : Int
+    , y2 : Int
+    }
+
+
+type alias Point =
+    { x : Int
+    , y : Int
+    }
+
+
 type alias Model =
     { stateMachines : WebData (List StateMachine)
     , active : Active
     , executions : WebData (List Execution)
     , events : WebData (List Event)
+    , stateMachineDescriptorForExecution : WebData StateMachineDescriptor
     , notifications : NotificationVisibility
     , randomInt : Int
+    , axis : Point
     }
 
 
@@ -268,6 +325,7 @@ type Msg
     | NoOp
     | SelectStateMachine StateMachine
     | SelectExecution Execution
+    | SelectGraphExecution Execution
     | SelectView Active
     | HandleDeleteStateMachine (WebData String)
     | HandlePostMachine (WebData Int)
@@ -280,3 +338,6 @@ type Msg
     | GotSeed Int
     | ShowNotifications
     | HideNotifications
+    | HandleDescribeStateMachine (WebData StateMachineDescriptor)
+    | GraphMoveUp
+    | GraphMoveDown

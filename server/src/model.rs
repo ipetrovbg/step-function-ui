@@ -1,4 +1,7 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 #[derive(Deserialize, Serialize)]
 pub struct StateMachineResponse {
@@ -103,3 +106,86 @@ pub struct EventResponse {
 pub struct ServerError {
     pub message: String
 }
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub enum Type {
+    Task,
+    Pass,
+    Choice,
+    Fail,
+    Succeed,
+    Wait,
+    Map,
+    Parallel,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Choice {
+    #[serde(rename = "Variable")]
+    variable: String,
+
+    #[serde(rename = "IsPresent")]
+    is_present: Option<bool>,
+
+    #[serde(rename = "BooleanEquals")]
+    bool_equals: Option<bool>,
+
+    #[serde(rename = "Next")]
+    pub next: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Catch {
+    #[serde(rename = "ErrorEquals")]
+    pub error_equals: Vec<String>,
+    #[serde(rename = "Next")]
+    pub next: String,
+    #[serde(rename = "ResultPath")]
+    pub result_path: String,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Step {
+    #[serde(rename = "Type")]
+    pub step_type: Type,
+
+    #[serde(rename = "End")]
+    pub end: Option<bool>,
+
+    #[serde(rename = "Next")]
+    pub next: Option<String>,
+
+    #[serde(rename = "Resource")]
+    pub resource: Option<Value>,
+
+    #[serde(rename = "ResultPath")]
+    pub result_path: Option<String>,
+
+    #[serde(rename = "Choices")]
+    pub choices: Option<Vec<Choice>>,
+
+    #[serde(rename = "Catch")]
+    pub catch: Option<Vec<Catch>>,
+
+    #[serde(rename = "Default")]
+    pub default: Option<String>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct StateMachineDefinition {
+    #[serde(rename = "Comment")]
+    pub comment: String,
+    #[serde(rename = "StartAt")]
+    pub start_at: String,
+    #[serde(rename = "States")]
+    pub states: BTreeMap<String, Step>,
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct StateMachineDescriptor {
+    #[serde(rename = "stateMachineArn")]
+    pub state_machine_arn: String,
+    pub name: String,
+    pub definition: String
+}
+

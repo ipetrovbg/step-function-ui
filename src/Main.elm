@@ -3,6 +3,7 @@ module Main exposing (..)
 import Api
     exposing
         ( deleteStateMachine
+        , describeStateMachineForExecution
         , getEvents
         , getStateMachine
         , getStateMachineExecutions
@@ -12,13 +13,15 @@ import Api
 import Browser exposing (Document)
 import Browser.Navigation exposing (Key)
 import Colors
-import Constants exposing (each, london)
+import Constants exposing (each, londonRegion)
 import Debug exposing (toString)
+import Dict
 import Element exposing (Color, Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
+import Graph exposing (graphWidth)
 import Html.Attributes
 import JsonTree
 import Random
@@ -39,14 +42,16 @@ import Types
         , NotificationVisibility(..)
         , Region(..)
         , StartedEventDetails
+        , StateEntered
         , StateEnteredDetails
+        , StateExited
         , StateExitedDetails
         , StateMachine
         , SucceededEventDetails
         )
 import UUID exposing (UUID)
 import Url exposing (Url)
-import Utils exposing (perform)
+import Utils exposing (inOutEvents, perform)
 
 
 errorNotificationView : BaseNotification -> Element Msg
@@ -351,7 +356,7 @@ stateMachineDataView stateMachines =
                             ]
                             { label = Element.text "Delete"
                             , onPress =
-                                Just <| DeleteStateMachine london stateMachine.stateMachineArn
+                                Just <| DeleteStateMachine londonRegion stateMachine.stateMachineArn
                             }
               }
             ]
@@ -513,7 +518,7 @@ executionsTableView executions =
                             ]
                         <|
                             Element.text <|
-                                String.slice 0 19 execution.startDate
+                                String.slice 0 19 execution.stopDate
               }
             , { header =
                     Element.el
@@ -547,7 +552,7 @@ executionsTableView executions =
                                                 Element.text "Stop"
                                         , onPress =
                                             Just <|
-                                                StopRunningExecution london execution.executionArn
+                                                StopRunningExecution londonRegion execution.executionArn
                                         }
 
                             _ ->
@@ -610,6 +615,9 @@ executionsView model =
                             executionsTableView executions
                     ]
 
+                ExecutionHistoryGraphView _ ->
+                    []
+
                 ExecutionHistoryView _ ->
                     [ Element.none ]
             )
@@ -626,6 +634,9 @@ getProperAppWidth active =
             Constants.executionsWidth
 
         ExecutionHistoryView _ ->
+            Constants.executionHistoryWidth
+
+        ExecutionHistoryGraphView _ ->
             Constants.executionHistoryWidth
 
 
@@ -669,12 +680,47 @@ stepColor event =
             Colors.successColor <| Just 1.0
 
 
+inOutEventView : ( StateEntered, StateExited ) -> Element Msg
+inOutEventView ( inDetails, outDetails ) =
+    Element.row
+        [ Element.spaceEvenly
+        , Element.padding 16
+        ]
+        [ Element.column
+            [ Element.height <| Element.px 500
+            , Element.width Element.fill
+            , Element.scrollbarX
+            , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
+            , Element.Border.width 1
+            , Element.Border.color <| Colors.lightBody <| Just 1.0
+            ]
+            [ Element.el [ Element.Font.size 16 ] <| Element.text inDetails.timestamp
+            , JsonTree.parseString inDetails.stateEnteredEventDetails.input
+                |> Result.map (\tree -> JsonTree.view tree (config NoOp) JsonTree.defaultState |> Element.html)
+                |> Result.withDefault (Element.text "Failed to parse JSON")
+            ]
+        , Element.column
+            [ Element.height <| Element.px 500
+            , Element.scrollbarX
+            , Element.width Element.fill
+            , Html.Attributes.style "word-break" "break-all" |> Element.htmlAttribute
+            , Element.Border.width 1
+            , Element.Border.color <| Colors.lightBody <| Just 1.0
+            ]
+            [ Element.el [ Element.Font.size 16 ] <| Element.text outDetails.timestamp
+            , JsonTree.parseString outDetails.stateExitedEventDetails.output
+                |> Result.map (\tree -> JsonTree.view tree (config NoOp) JsonTree.defaultState |> Element.html)
+                |> Result.withDefault (Element.text "Failed to parse JSON")
+            ]
+        ]
+
+
 executionHistoryTableView : List Event -> Element Msg
 executionHistoryTableView events =
     Element.table
         [ Element.paddingXY 0 16
         , Element.width Element.fill
-        , Element.height <| Element.px 680
+        , Element.height <| Element.px 1500
         , Element.scrollbarX
         , Element.spacing 16
         ]
@@ -785,7 +831,7 @@ executionHistoryTableView events =
                         ]
                     <|
                         Element.text "State"
-              , width = Element.px 600
+              , width = Element.px 1200
               , view =
                     \event ->
                         case event of
@@ -919,8 +965,8 @@ executionStartView event =
         ]
 
 
-executionHistoryView : Model -> Element Msg
-executionHistoryView model =
+executionHistoryView : Model -> Execution -> Element Msg
+executionHistoryView model ex =
     let
         executionId =
             case model.active of
@@ -931,7 +977,10 @@ executionHistoryView model =
                     "Events"
 
                 ExecutionHistoryView execution ->
-                    "Events for \"" ++ execution.executionArn ++ "\""
+                    "Events for \"" ++ execution.name ++ "\""
+
+                ExecutionHistoryGraphView _ ->
+                    "Not Implemented"
     in
     Element.column
         [ Element.width Element.fill
@@ -955,6 +1004,10 @@ executionHistoryView model =
                 Element.text executionId
             , Element.row [ Element.alignRight, Element.spacing 16 ]
                 [ Element.Input.button []
+                    { label = Element.text "Graph"
+                    , onPress = Just <| SelectGraphExecution ex
+                    }
+                , Element.Input.button []
                     { label =
                         Element.image [ Element.width <| Element.px 20 ]
                             { src = "src/static/back.svg"
@@ -970,7 +1023,10 @@ executionHistoryView model =
 
                             ExecutionHistoryView execution ->
                                 Just <|
-                                    FetchStateMachine london execution.stateMachineArn
+                                    FetchStateMachine londonRegion execution.stateMachineArn
+
+                            ExecutionHistoryGraphView _ ->
+                                Nothing
                     }
                 , Element.Input.button []
                     { label =
@@ -992,8 +1048,8 @@ executionHistoryView model =
             Failure e ->
                 Element.text <| toString e
 
-            Success a ->
-                executionHistoryTableView a
+            Success events ->
+                executionHistoryTableView events
         ]
 
 
@@ -1011,8 +1067,60 @@ body model =
             ExecutionsView _ ->
                 executionsView model
 
-            ExecutionHistoryView _ ->
-                executionHistoryView model
+            ExecutionHistoryView ex ->
+                executionHistoryView model ex
+
+            ExecutionHistoryGraphView execution ->
+                case model.stateMachineDescriptorForExecution of
+                    NotAsked ->
+                        Element.none
+
+                    Loading ->
+                        Element.el [] <| Element.text "Loading..."
+
+                    Failure _ ->
+                        Element.el [] <| Element.text "Fetching events failed."
+
+                    Success stateMachineDescriptorForExecution ->
+                        let
+                            data =
+                                Graph.prepareNodes
+                                    (Dict.keys
+                                        stateMachineDescriptorForExecution.states
+                                    )
+                                    stateMachineDescriptorForExecution.states
+                                    graphWidth
+                        in
+                        Element.column
+                            [ Element.width Element.fill
+                            , Element.paddingEach Constants.standardPadding16
+                            , Element.Border.color <| Colors.primaryColor Nothing
+                            , Element.Border.width 1
+                            , Element.Border.rounded 4
+                            ]
+                            [ Element.row
+                                [ Element.width Element.fill
+                                , Element.spaceEvenly
+                                ]
+                                [ Element.el [] <| Element.text ("Execution Graph - " ++ execution.name)
+                                , Element.Input.button []
+                                    { label = Element.image [ Element.width <| Element.px 20 ] { src = "src/static/back.svg", description = "Back to Executions button" }
+                                    , onPress = Just <| SelectExecution execution
+                                    }
+                                ]
+                            , Element.row [ Element.centerY, Element.centerX ]
+                                [ Element.html <|
+                                    Graph.svgFragment graphWidth
+                                        model.axis
+                                        (data
+                                            |> List.map Graph.renderNode
+                                        )
+                                , Element.column [ Element.spacing 16 ]
+                                    [ Element.Input.button [] { label = Element.html Graph.upPolygon, onPress = Just GraphMoveDown }
+                                    , Element.Input.button [] { label = Element.html Graph.downPolygon, onPress = Just GraphMoveUp }
+                                    ]
+                                ]
+                            ]
         ]
 
 
@@ -1036,9 +1144,11 @@ init _ _ _ =
       , events = NotAsked
       , notifications = Hidden []
       , randomInt = 1
+      , stateMachineDescriptorForExecution = NotAsked
+      , axis = { x = 0, y = 0 }
       }
     , Cmd.batch
-        [ getStateMachines london ]
+        [ getStateMachines londonRegion ]
     )
 
 
@@ -1081,11 +1191,11 @@ update msg model =
             ( model, Cmd.none )
 
         FetchStateMachines ->
-            ( { model | stateMachines = Loading }, getStateMachines london )
+            ( { model | stateMachines = Loading }, getStateMachines londonRegion )
 
         SelectStateMachine stateMachine ->
             ( { model | active = ExecutionsView stateMachine, executions = Loading }
-            , getStateMachineExecutions london stateMachine.stateMachineArn
+            , getStateMachineExecutions londonRegion stateMachine.stateMachineArn
             )
 
         SelectView active ->
@@ -1126,9 +1236,12 @@ update msg model =
                             Cmd.none
 
                         ExecutionsView stateMachine ->
-                            getStateMachineExecutions london stateMachine.stateMachineArn
+                            getStateMachineExecutions londonRegion stateMachine.stateMachineArn
 
                         ExecutionHistoryView _ ->
+                            Cmd.none
+
+                        ExecutionHistoryGraphView _ ->
                             Cmd.none
             in
             ( { model | executions = Loading }, cmd )
@@ -1163,7 +1276,18 @@ update msg model =
 
         SelectExecution execution ->
             ( { model | active = ExecutionHistoryView execution, events = Loading }
-            , getEvents london execution.executionArn
+            , Cmd.batch
+                [ getEvents londonRegion execution.executionArn
+                , describeStateMachineForExecution londonRegion execution.executionArn
+                ]
+            )
+
+        SelectGraphExecution execution ->
+            ( { model | active = ExecutionHistoryGraphView execution, events = Loading }
+            , Cmd.batch
+                [ getEvents londonRegion execution.executionArn
+                , describeStateMachineForExecution londonRegion execution.executionArn
+                ]
             )
 
         HandleDeleteStateMachine webData ->
@@ -1194,7 +1318,7 @@ update msg model =
                 , events = NotAsked
               }
             , Cmd.batch
-                [ getStateMachines london
+                [ getStateMachines londonRegion
 
                 --, Random.generate GotSeed <| Random.int 1 1000000
                 , cmd
@@ -1215,7 +1339,10 @@ update msg model =
                             Cmd.none
 
                         ExecutionHistoryView execution ->
-                            getEvents london execution.executionArn
+                            getEvents londonRegion execution.executionArn
+
+                        ExecutionHistoryGraphView _ ->
+                            Cmd.none
             in
             ( { model | events = Loading }, cmd )
 
@@ -1278,9 +1405,12 @@ update msg model =
                                     Cmd.none
 
                                 ExecutionsView stateMachine ->
-                                    getStateMachineExecutions london stateMachine.stateMachineArn
+                                    getStateMachineExecutions londonRegion stateMachine.stateMachineArn
 
                                 ExecutionHistoryView _ ->
+                                    Cmd.none
+
+                                ExecutionHistoryGraphView _ ->
                                     Cmd.none
             in
             ( model, cmd )
@@ -1425,6 +1555,29 @@ update msg model =
                             Cleared
             in
             ( { model | notifications = notifications }, Cmd.none )
+
+        HandleDescribeStateMachine webData ->
+            ( { model | stateMachineDescriptorForExecution = webData }, Cmd.none )
+
+        GraphMoveUp ->
+            let
+                y =
+                    model.axis.y
+
+                x =
+                    model.axis.x
+            in
+            ( { model | axis = { x = x, y = y + Constants.movingGraphDistance } }, Cmd.none )
+
+        GraphMoveDown ->
+            let
+                y =
+                    model.axis.y
+
+                x =
+                    model.axis.x
+            in
+            ( { model | axis = { x = x, y = y - Constants.movingGraphDistance } }, Cmd.none )
 
 
 isSameNotification : Notification -> UUID -> Bool
