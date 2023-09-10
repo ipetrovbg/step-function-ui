@@ -33,6 +33,8 @@ cd server | cargo run
 npm start
 ```
 
+or
+
 #### Start Both with just file
 If you have [just](https://github.com/casey/just) installed on your machine, you can run:
 
