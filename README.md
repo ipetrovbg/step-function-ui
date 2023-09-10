@@ -37,5 +37,6 @@ npm start
 If you have [just](https://github.com/casey/just) installed on your machine, you can run:
 
 ```
+# just start default
 just start <aws-vault profile>
 ```
