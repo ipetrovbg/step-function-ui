@@ -1,21 +1,68 @@
 use std::collections::BTreeMap;
 
-use serde::{Deserialize, Serialize};
+use chrono::DateTime;
+use serde::{de, Deserialize, Deserializer, Serialize};
 use serde_json::Value;
+
+pub fn float_to_date_string<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<String, D::Error> {
+    Ok(match Value::deserialize(deserializer)? {
+        Value::Number(num) => {
+            let num = num
+                .as_f64()
+                .ok_or_else(|| de::Error::custom("Invalid number"))?;
+            format!(
+                "{}",
+                DateTime::from_timestamp(num as i64, 0)
+                    .ok_or_else(|| de::Error::custom("Invalid number"))?
+                    .format("%Y-%m-%d %H:%M")
+            )
+        }
+        e => return Err(de::Error::custom(e)),
+    })
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+struct S {
+    #[serde(deserialize_with = "float_to_date_string")]
+    time: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn int_float_to_date_string_works() {
+        let as_string = r#"{"time":1699612567.763}"#;
+
+        let my_s: S = serde_json::from_str(&as_string).unwrap();
+        assert_eq!(
+            my_s.time,
+            format!(
+                "{}",
+                DateTime::from_timestamp(1699612567, 0)
+                    .unwrap()
+                    .format("%Y-%m-%d %H:%M")
+            )
+        );
+    }
+}
 
 #[derive(Deserialize, Serialize)]
 pub struct StateMachineResponse {
     #[serde(rename = "stateMachines")]
-    pub state_machines: Vec<StateMachine>
+    pub state_machines: Vec<StateMachine>,
 }
 
 #[derive(Deserialize, Serialize)]
-pub  struct StateMachine {
+pub struct StateMachine {
     pub name: String,
     #[serde(rename = "stateMachineArn")]
     pub state_machine_arn: String,
     #[serde(rename = "type")]
     pub kind: String,
+    #[serde(deserialize_with = "float_to_date_string")]
     #[serde(rename = "creationDate")]
     pub creation_date: String,
 }
@@ -36,7 +83,7 @@ pub struct Executions {
 
 #[derive(Deserialize, Serialize)]
 pub struct ExecutionsResponse {
-    pub executions: Vec<Executions>
+    pub executions: Vec<Executions>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -99,12 +146,12 @@ pub struct ExecutionSucceededEventDetails {
 
 #[derive(Deserialize, Serialize)]
 pub struct EventResponse {
-    pub events: Vec<Event>
+    pub events: Vec<Event>,
 }
 
 #[derive(Serialize)]
 pub struct ServerError {
-    pub message: String
+    pub message: String,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -186,6 +233,5 @@ pub struct StateMachineDescriptor {
     #[serde(rename = "stateMachineArn")]
     pub state_machine_arn: String,
     pub name: String,
-    pub definition: String
+    pub definition: String,
 }
-
